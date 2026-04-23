@@ -1349,9 +1349,9 @@ if create_pdf:
     }
 
     assumptions = {
-        "Is the buyer strict to the project to be RTB-only" = rtb_only,
-        "Renewables experience" = experience, 
-        "Risk Tolerance" = risk_pref,
+        "Is the buyer strict to the project to be RTB-only" : rtb_only,
+        "Renewables experience" : experience, 
+        "Risk Tolerance" : risk_pref,
         "Project Type": project_type,
         "Investor Entry Stage": entry_stage,
         "Capacity (MW)": capacity_mw,
