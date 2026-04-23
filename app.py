@@ -9,7 +9,9 @@ import base64
 from datetime import date
 import io
 import matplotlib.pyplot as plt
-
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 
 
 # ============================================================
@@ -1006,6 +1008,59 @@ if create_pdf:
 
     st.download_button(
         "Download report.pdf",
+        data=pdf_bytes,
+        file_name="investment_memo.pdf",
+        mime="application/pdf",
+        use_container_width=True,
+    )
+st.markdown("### Report Export")
+colA, colB = st.columns([1, 1], gap="medium")
+
+with colA:
+    create_pdf = st.button("Create Report (PDF)", type="primary", use_container_width=True)
+
+with colB:
+    create_html = st.button("Download Report (HTML)", use_container_width=True)
+
+if create_html:
+    # Reuse your existing HTML report builder if you have it.
+    # If your old one depends on plotly->png exports, keep it HTML-only.
+    html = make_portal_html_report_somehow()  # <-- replace with your existing HTML generator
+    st.download_button(
+        "Download investment_memo.html",
+        data=html.encode("utf-8"),
+        file_name="investment_memo.html",
+        mime="text/html",
+        use_container_width=True,
+    )
+
+if create_pdf:
+    feas_table = feasibility_numbers_table()[["Metric", "Value", "Insight"]].copy()
+    costs = costs_table().copy()
+
+    kpis = {
+        "score": scorecard["Score"],
+        "recommendation": scorecard["Recommendation"],
+        "npv": money(npv),
+        "irr": pct(irr),
+        "payback": years(payback),
+        "initial_outlay": money(initial_outlay),
+        "build_capex": money(build_capex),
+    }
+
+    pdf_bytes = build_pdf_report(
+        logo_path=LOGO_PATH,
+        brand_orange=BRAND_ORANGE,
+        project_type=project_type,
+        entry_stage=entry_stage,
+        kpis=kpis,
+        costs_table=costs,
+        feasibility_table=feas_table,
+        df_cf=df_cf,
+    )
+
+    st.download_button(
+        "Download investment_memo.pdf",
         data=pdf_bytes,
         file_name="investment_memo.pdf",
         mime="application/pdf",
