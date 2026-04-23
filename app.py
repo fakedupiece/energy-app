@@ -798,7 +798,7 @@ def make_html_report_with_mpl_charts():
     
       <div class="card">
         <h3>Pre-feasibility Highlights</h3>
-        {feasibility_table.to_html(index=False)}
+        {fn.to_html(index=False)}
       </div>
     
       <div class="card">
