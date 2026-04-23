@@ -719,7 +719,7 @@ def make_mpl_charts(df_cf: pd.DataFrame, brand_orange: str):
     fig2, ax2 = plt.subplots(figsize=(7.2, 3.6))
     ax2.bar(df_cf["Year"], df_cf["Energy Revenue ($)"], label="Energy", color="#1D4ED8", alpha=0.85)
     ax2.bar(df_cf["Year"], df_cf["Carbon Revenue ($)"],
-            bottom=df_cf["Energy Revenue ($)"], label="Carbon", color=brand_orange, alpha=0.85)
+            bottom=df_cf["Energy Revenue ($)"], label="Carbon", color=BRAND_ORANGE, alpha=0.85)
     ax2.set_title("Revenue Composition — Energy vs Carbon", fontweight="bold")
     ax2.grid(True, axis="y", alpha=0.25)
     ax2.set_xlabel("Year")
@@ -729,7 +729,7 @@ def make_mpl_charts(df_cf: pd.DataFrame, brand_orange: str):
 
     return fig1, fig2
 def make_html_report_with_mpl_charts():
-    fig1, fig2 = make_mpl_charts(df_cf, brand_orange)
+    fig1, fig2 = make_mpl_charts(df_cf, BRAND_ORANGE)
     img1_uri = "data:image/png;base64," + base64.b64encode(fig_to_png_bytes_matplotlib(fig1)).decode("utf-8")
     img2_uri = "data:image/png;base64," + base64.b64encode(fig_to_png_bytes_matplotlib(fig2)).decode("utf-8")
     today = date.today().isoformat()
