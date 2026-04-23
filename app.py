@@ -777,7 +777,7 @@ def make_html_report_with_mpl_charts():
     <style>
       body {{ font-family: Arial; color:#0F172A; background:#F6F8FC; padding: 22px; }}
       .card {{ background:#fff; border:1px solid rgba(15,23,42,.12); border-radius:14px; padding:14px; margin-bottom:14px; }}
-      .accent {{ height:4px; background:linear-gradient(90deg,{brand_orange}, rgba(255,106,0,0)); border-radius:999px; }}
+      .accent {{ height:4px; background:linear-gradient(90deg,{BRAND_ORANGE}, rgba(255,106,0,0)); border-radius:999px; }}
       table {{ width:100%; border-collapse: collapse; font-size: 12px; }}
       th, td {{ border:1px solid rgba(15,23,42,.12); padding:8px; text-align:left; }}
       th {{ background:#F1F5F9; }}
