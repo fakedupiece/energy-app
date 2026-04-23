@@ -775,6 +775,376 @@ def make_html_report_with_mpl_charts():
     </body></html>
     """
     return html
+import html as _html
+import base64
+
+def _df_to_html_table(df: pd.DataFrame) -> str:
+    """Render a clean, readable HTML table (no pandas default heavy styling)."""
+    cols = list(df.columns)
+    rows = df.values.tolist()
+
+    thead = "".join([f"<th>{_html.escape(str(c))}</th>" for c in cols])
+    tbody_rows = []
+    for r in rows:
+        tds = "".join([f"<td>{_html.escape(str(v))}</td>" for v in r])
+        tbody_rows.append(f"<tr>{tds}</tr>")
+    tbody = "".join(tbody_rows)
+
+    return f"""
+    <table class="table">
+      <thead><tr>{thead}</tr></thead>
+      <tbody>{tbody}</tbody>
+    </table>
+    """
+
+def make_html_report_pro(
+    *,
+    brand_orange: str,
+    report_title: str,
+    project_type: str,
+    entry_stage: str,
+    logo_data_uri: str | None,
+    kpis: dict,
+    assumptions: dict,
+    feasibility_df: pd.DataFrame,     # expects string-ready columns, e.g. Metric/Value/Insight
+    costs_df: pd.DataFrame,           # expects string-ready values
+    pre_tasks_df: pd.DataFrame,       # expects string-ready values
+    lic_tasks_df: pd.DataFrame,       # expects string-ready values
+    df_cf: pd.DataFrame,              # raw numeric cashflow df (used for charts + table formatting)
+    notes: list[str] | None = None,   # investor insight bullets
+    include_cashflows: bool = True,
+):
+    """
+    Professional HTML report (static) that includes:
+    - All assumptions/inputs
+    - All tables
+    - Charts embedded as base64 PNG (Matplotlib) -> works on Streamlit Cloud
+    """
+
+    # Charts as base64 PNG using Matplotlib (safe on Streamlit Cloud)
+    fig1, fig2 = make_mpl_charts(df_cf, brand_orange)
+    img1_b64 = base64.b64encode(fig_to_png_bytes_matplotlib(fig1)).decode("utf-8")
+    img2_b64 = base64.b64encode(fig_to_png_bytes_matplotlib(fig2)).decode("utf-8")
+    img1_uri = f"data:image/png;base64,{img1_b64}"
+    img2_uri = f"data:image/png;base64,{img2_b64}"
+
+    # Prepare assumptions table
+    assump_df = pd.DataFrame([{"Assumption": k, "Value": v} for k, v in assumptions.items()])
+
+    # Cashflows (formatted)
+    cash_html = ""
+    if include_cashflows:
+        cash = df_cf.copy()
+        # Keep a readable subset of columns; add more if you want
+        keep_cols = ["Year", "Total Revenue ($)", "OPEX ($)", "Net Cashflow ($)", "Cumulative ($)"]
+        keep_cols = [c for c in keep_cols if c in cash.columns]
+        cash = cash[keep_cols].copy()
+
+        for col in cash.columns:
+            if col != "Year":
+                cash[col] = cash[col].map(lambda v: f"{float(v):,.0f}")
+        cash_html = _df_to_html_table(cash)
+
+    # HTML tables
+    feasibility_html = _df_to_html_table(feasibility_df)
+    costs_html = _df_to_html_table(costs_df)
+    pre_html = _df_to_html_table(pre_tasks_df)
+    lic_html = _df_to_html_table(lic_tasks_df)
+    assump_html = _df_to_html_table(assump_df)
+
+    # Notes list
+    notes = notes or []
+    notes_html = ""
+    if notes:
+        notes_li = "".join([f"<li>{_html.escape(n)}</li>" for n in notes])
+        notes_html = f"<ul class='bullets'>{notes_li}</ul>"
+
+    # KPI display helpers (expects strings already in kpis, but ok if not)
+    def k(key, default="—"):
+        return _html.escape(str(kpis.get(key, default)))
+
+    # Logo
+    logo_block = f"<img class='logo' src='{logo_data_uri}' />" if logo_data_uri else ""
+
+    html_doc = f"""
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{_html.escape(report_title)}</title>
+  <style>
+    :root {{
+      --accent: {brand_orange};
+      --bg: #F6F8FC;
+      --card: #FFFFFF;
+      --text: #0F172A;
+      --muted: rgba(15, 23, 42, 0.70);
+      --border: rgba(15, 23, 42, 0.12);
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 26px;
+    }}
+    .wrap {{ max-width: 1100px; margin: 0 auto; }}
+    .header {{
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+    }}
+    .header-row {{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap: 18px;
+    }}
+    .brand {{
+      display:flex;
+      align-items:center;
+      gap: 12px;
+    }}
+    .logo {{
+      height: 42px;
+      width: auto;
+      display:block;
+    }}
+    .title {{
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      margin: 0;
+    }}
+    .sub {{
+      margin: 3px 0 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }}
+    .accent-line {{
+      height: 4px;
+      width: 100%;
+      background: linear-gradient(90deg, var(--accent), rgba(255,106,0,0));
+      border-radius: 999px;
+      margin-top: 12px;
+    }}
+    .badge {{
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,106,0,0.10);
+      border: 1px solid rgba(255,106,0,0.25);
+      color: #7A2E00;
+      font-size: 12px;
+      white-space: nowrap;
+      font-weight: 700;
+    }}
+    .grid {{
+      display:grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 14px;
+      margin-top: 14px;
+    }}
+    .card {{
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px 14px;
+      box-shadow: var(--shadow);
+    }}
+    .kpi {{
+      padding: 14px;
+    }}
+    .kpi-title {{
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }}
+    .kpi-value {{
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }}
+    .kpi-sub {{
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }}
+    h2 {{
+      font-size: 16px;
+      margin: 0 0 10px 0;
+      letter-spacing: -0.01em;
+    }}
+    h3 {{
+      font-size: 13px;
+      margin: 0 0 10px 0;
+      color: rgba(15,23,42,.85);
+    }}
+    .two {{
+      grid-column: span 6;
+    }}
+    .four {{
+      grid-column: span 4;
+    }}
+    .three {{
+      grid-column: span 3;
+    }}
+    .six {{
+      grid-column: span 6;
+    }}
+    .twelve {{
+      grid-column: span 12;
+    }}
+    .hr {{
+      height: 1px;
+      background: var(--border);
+      border-radius: 999px;
+      margin: 14px 0;
+    }}
+    .table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }}
+    .table th, .table td {{
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }}
+    .table th {{
+      background: #F1F5F9;
+      font-weight: 800;
+    }}
+    .bullets {{
+      margin: 8px 0 0 18px;
+      color: rgba(15,23,42,.85);
+      font-size: 12.5px;
+    }}
+    .chart {{
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: #fff;
+      padding: 10px;
+    }}
+    .chart img {{
+      width: 100%;
+      height: auto;
+      display:block;
+    }}
+    .small {{
+      font-size: 12px;
+      color: var(--muted);
+    }}
+
+    /* Print-friendly */
+    @media print {{
+      body {{ background: #fff; padding: 0; }}
+      .card, .header {{ box-shadow: none; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div class="header-row">
+        <div class="brand">
+          {logo_block}
+          <div>
+            <div class="title">{_html.escape(report_title)}</div>
+            <div class="sub">{_html.escape(project_type)} • Entry stage: {_html.escape(entry_stage)}</div>
+          </div>
+        </div>
+        <div class="badge">Professional Memo</div>
+      </div>
+      <div class="accent-line"></div>
+    </div>
+
+    <div class="grid">
+      <div class="card kpi three">
+        <div class="kpi-title">Pre‑feasibility score</div>
+        <div class="kpi-value">{k("score")}/100</div>
+        <div class="kpi-sub">{k("recommendation")}</div>
+      </div>
+      <div class="card kpi three">
+        <div class="kpi-title">NPV</div>
+        <div class="kpi-value" style="color:#1D4ED8;">{k("npv")}</div>
+        <div class="kpi-sub">incl. carbon income</div>
+      </div>
+      <div class="card kpi three">
+        <div class="kpi-title">IRR</div>
+        <div class="kpi-value" style="color:#15803D;">{k("irr")}</div>
+        <div class="kpi-sub">return profile</div>
+      </div>
+      <div class="card kpi three">
+        <div class="kpi-title">Payback</div>
+        <div class="kpi-value" style="color:#B45309;">{k("payback")}</div>
+        <div class="kpi-sub">years to breakeven</div>
+      </div>
+
+      <div class="card twelve">
+        <h2>All Inputs / Assumptions (Interactive Data Snapshot)</h2>
+        <div class="small">This section captures the exact slider/input values used to compute the results in this memo.</div>
+        <div class="hr"></div>
+        {assump_html}
+      </div>
+
+      <div class="card twelve">
+        <h2>Pre‑Feasibility Summary (Numbers + Insight)</h2>
+        <div class="small">Investor-facing signals (value creation, return strength, dependency risks).</div>
+        <div class="hr"></div>
+        {feasibility_html}
+        {("<h3>Investor insights</h3>" + notes_html) if notes_html else ""}
+      </div>
+
+      <div class="card twelve">
+        <h2>Costs Summary (DEV + CAPEX)</h2>
+        <div class="small">Shows development vs build CAPEX split, including transmission distance-based pricing.</div>
+        <div class="hr"></div>
+        {costs_html}
+      </div>
+
+      <div class="card six">
+        <h2>Chart: Cumulative Cashflow</h2>
+        <div class="chart"><img src="{img1_uri}" /></div>
+      </div>
+
+      <div class="card six">
+        <h2>Chart: Revenue Composition</h2>
+        <div class="chart"><img src="{img2_uri}" /></div>
+      </div>
+
+      <div class="card six">
+        <h2>Pre‑licensing Tasks (Line Items)</h2>
+        <div class="hr"></div>
+        {pre_html}
+      </div>
+
+      <div class="card six">
+        <h2>Licensing Tasks (Line Items)</h2>
+        <div class="hr"></div>
+        {lic_html}
+      </div>
+
+      {"<div class='card twelve'><h2>Cashflows (All Years)</h2><div class='small'>Energy + carbon revenue minus OPEX; cumulative from investor entry outlay.</div><div class='hr'></div>" + cash_html + "</div>" if include_cashflows else ""}
+
+      <div class="card twelve">
+        <div class="small">
+          Generated report is static. For scenario iteration, use the live Streamlit dashboard and regenerate the memo.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>
+"""
+    return html_doc
     
 import io
 import math
@@ -1383,52 +1753,62 @@ if create_pdf:
     lic_rep = lic_tasks_df.copy()
     lic_rep["Cost ($)"] = lic_rep["Cost ($)"].map(lambda v: f"{float(v):,.0f}")
 
+    if create_pdf:
+        pdf_bytes = build_pdf_report_pro(
+            logo_path=LOGO_PATH,
+            brand_orange=BRAND_ORANGE,
+            report_title="Renewable Investment Memo",
+            project_type=project_type,
+            entry_stage=entry_stage,
+            kpis=kpis,
+            assumptions=assumptions,
+            feasibility_df=feasibility_df,
+            costs_df=costs_df,
+            pre_tasks_df=pre_rep,
+            lic_tasks_df=lic_rep,
+            df_cf=df_cf,
+        )
+        st.download_button("Download investment_memo.pdf", pdf_bytes, "investment_memo.pdf", "application/pdf")
 
-    pdf_bytes = build_pdf_report_pro(
-        logo_path=LOGO_PATH,
-        brand_orange=BRAND_ORANGE,
-        report_title="Renewable Investment Memo",
-        project_type=project_type,
-        entry_stage=entry_stage,
-        kpis=kpis,
-        assumptions=assumptions,
-        feasibility_df=feasibility_df,
-        costs_df=costs_df,
-        pre_tasks_df=pre_rep,
-        lic_tasks_df=lic_rep,
-        df_cf=df_cf,
-    )
-    st.download_button("Download investment_memo.pdf", pdf_bytes, "investment_memo.pdf", "application/pdf")
-
-    # st.download_button(
-    #     "Download report.pdf",
-    #     data=pdf_bytes,
-    #     file_name="investment_memo.pdf",
-    #     mime="application/pdf",
-    #     use_container_width=True,
-    # )
+   
     
-
-if create_html:
-    # Reuse your existing HTML report builder if you have it.
-    # If your old one depends on plotly->png exports, keep it HTML-only.
-    kpis = {
-    "score": scorecard["Score"],
-    "recommendation": scorecard["Recommendation"],
-    "npv": money(npv),
-    "irr": pct(irr),
-    "payback": years(payback),
-    "initial_outlay": money(initial_outlay),
-    "build_capex": money(build_capex),
-    }
-    html = make_html_report_with_mpl_charts()  # <-- replace with your existing HTML generator
-    st.download_button(
-        "Download investment_memo.html",
-        data=html.encode("utf-8"),
-        file_name="investment_memo.html",
-        mime="text/html",
-        use_container_width=True,
-    )
-
+    if create_html:
+        # Reuse your existing HTML report builder if you have it.
+        # If your old one depends on plotly->png exports, keep it HTML-only.
+        kpis = {
+            "score": scorecard["Score"],
+            "recommendation": scorecard["Recommendation"],
+            "npv": money(npv),
+            "irr": pct(irr),
+            "payback": years(payback),
+            "initial_outlay": money(initial_outlay),
+            "build_capex": money(build_capex),
+        }
+        
+        html_report = make_html_report_pro(
+            brand_orange=BRAND_ORANGE,
+            report_title="Renewable Investment Memo",
+            project_type=project_type,
+            entry_stage=entry_stage,
+            logo_data_uri=logo_uri,  # from img_to_data_uri(LOGO_PATH)
+            kpis=kpis,
+            assumptions=assumptions,  # dict of all inputs
+            feasibility_df=feasibility_df,  # string-ready df
+            costs_df=costs_df,              # string-ready df
+            pre_tasks_df=pre_rep,           # string-ready df
+            lic_tasks_df=lic_rep,           # string-ready df
+            df_cf=df_cf,
+            notes=scorecard["Notes"],
+            include_cashflows=True,
+        )
+        # html = make_html_report_with_mpl_charts()  # <-- replace with your existing HTML generator
+    
+        st.download_button(
+            "Download investment_memo.html",
+            data=html_report.encode("utf-8"),
+            file_name="investment_memo.html",
+            mime="text/html",
+        )
+    
 
     
