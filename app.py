@@ -22,7 +22,7 @@ except Exception:
 st.set_page_config(page_title="Renewable Investment Dashboard", page_icon="📊", layout="wide")
 
 BRAND_ORANGE = "#FF6A00"
-LOGO_PATH = "assets/logo.png"
+LOGO_PATH = "ideal_logo.jpg"
 TRANSMISSION_COST_PER_KM = 100_000.0  # $ per km
 
 # ============================================================
