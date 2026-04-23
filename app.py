@@ -647,6 +647,7 @@ with tab3:
 # ============================================================
 # PDF & HTML REPORT GENERATION
 # ============================================================
+
 # def plotly_fig_to_png_bytes(fig) -> bytes:
 #     # Requires kaleido installed
 #     return fig.to_image(format="png", scale=2)
@@ -691,42 +692,7 @@ def make_report_html(fig_cum_png_uri: str, fig_rev_png_uri: str) -> str:
     lic_html = lic_rep.to_html(index=False, escape=False)
 
     insight_list = "".join([f"<li>{n}</li>" for n in scorecard["Notes"]])
-import matplotlib.pyplot as plt
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from reportlab.lib.utils import ImageReader
 
-def fig_to_png_bytes_matplotlib(fig) -> bytes:
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    buf.seek(0)
-    return buf.read()
-
-def make_mpl_charts(df_cf: pd.DataFrame, brand_orange: str):
-    # 1) Cumulative cashflow
-    fig1, ax1 = plt.subplots(figsize=(7.2, 3.6))
-    ax1.plot(df_cf["Year"], df_cf["Cumulative ($)"], linewidth=3, color=brand_orange)
-    ax1.fill_between(df_cf["Year"], df_cf["Cumulative ($)"], alpha=0.15, color=brand_orange)
-    ax1.set_title("Cumulative Cashflow ($)", fontweight="bold")
-    ax1.grid(True, alpha=0.25)
-    ax1.set_xlabel("Year")
-    ax1.set_ylabel("$")
-    fig1.tight_layout()
-
-    # 2) Revenue composition stacked bars (Energy + Carbon)
-    fig2, ax2 = plt.subplots(figsize=(7.2, 3.6))
-    ax2.bar(df_cf["Year"], df_cf["Energy Revenue ($)"], label="Energy", color="#1D4ED8", alpha=0.85)
-    ax2.bar(df_cf["Year"], df_cf["Carbon Revenue ($)"],
-            bottom=df_cf["Energy Revenue ($)"], label="Carbon", color=BRAND_ORANGE, alpha=0.85)
-    ax2.set_title("Revenue Composition — Energy vs Carbon", fontweight="bold")
-    ax2.grid(True, axis="y", alpha=0.25)
-    ax2.set_xlabel("Year")
-    ax2.set_ylabel("$")
-    ax2.legend(frameon=False)
-    fig2.tight_layout()
-
-    return fig1, fig2
 def make_html_report_with_mpl_charts():
     fig1, fig2 = make_mpl_charts(df_cf, BRAND_ORANGE)
     img1_uri = "data:image/png;base64," + base64.b64encode(fig_to_png_bytes_matplotlib(fig1)).decode("utf-8")
@@ -809,6 +775,277 @@ def make_html_report_with_mpl_charts():
     </body></html>
     """
     return html
+    
+import io
+import math
+import matplotlib.pyplot as plt
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
+from reportlab.lib import colors
+
+def fig_to_png_bytes_matplotlib(fig) -> bytes:
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=220, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
+
+def make_mpl_charts(df_cf: pd.DataFrame, brand_orange: str):
+    fig1, ax1 = plt.subplots(figsize=(7.4, 3.7))
+    ax1.plot(df_cf["Year"], df_cf["Cumulative ($)"], linewidth=3, color=brand_orange)
+    ax1.fill_between(df_cf["Year"], df_cf["Cumulative ($)"], alpha=0.15, color=brand_orange)
+    ax1.set_title("Cumulative Cashflow ($)", fontweight="bold")
+    ax1.grid(True, alpha=0.25)
+    ax1.set_xlabel("Year")
+    ax1.set_ylabel("$")
+    fig1.tight_layout()
+
+    fig2, ax2 = plt.subplots(figsize=(7.4, 3.7))
+    ax2.bar(df_cf["Year"], df_cf["Energy Revenue ($)"], label="Energy", color="#1D4ED8", alpha=0.85)
+    ax2.bar(df_cf["Year"], df_cf["Carbon Revenue ($)"],
+            bottom=df_cf["Energy Revenue ($)"], label="Carbon", color=brand_orange, alpha=0.85)
+    ax2.set_title("Revenue Composition — Energy vs Carbon", fontweight="bold")
+    ax2.grid(True, axis="y", alpha=0.25)
+    ax2.set_xlabel("Year")
+    ax2.set_ylabel("$")
+    ax2.legend(frameon=False)
+    fig2.tight_layout()
+    return fig1, fig2
+
+def _hex_to_rgb01(hex_color: str):
+    hex_color = hex_color.lstrip("#")
+    return tuple(int(hex_color[i:i+2], 16)/255 for i in (0, 2, 4))
+
+def _draw_header(c, width, height, brand_orange, logo_path, title, subtitle):
+    x0 = 40
+    y = height - 45
+
+    if logo_path and Path(logo_path).exists():
+        c.drawImage(logo_path, x0, y - 18, width=90, height=28, mask="auto")
+
+    c.setFont("Helvetica-Bold", 16)
+    c.setFillColor(colors.HexColor("#0F172A"))
+    c.drawString(x0 + 105, y, title)
+
+    c.setFont("Helvetica", 10)
+    c.setFillColor(colors.HexColor("#334155"))
+    c.drawString(x0 + 105, y - 14, subtitle)
+
+    r, g, b = _hex_to_rgb01(brand_orange)
+    c.setStrokeColorRGB(r, g, b)
+    c.setLineWidth(3)
+    c.line(x0, y - 28, width - 40, y - 28)
+
+def _draw_section_title(c, x, y, text):
+    c.setFont("Helvetica-Bold", 12)
+    c.setFillColor(colors.HexColor("#0F172A"))
+    c.drawString(x, y, text)
+    return y - 16
+
+def _draw_kpi_row(c, x, y, kpis: dict):
+    c.setFont("Helvetica-Bold", 11)
+    c.setFillColor(colors.HexColor("#0F172A"))
+    c.drawString(x, y, "Executive Summary")
+    y -= 14
+
+    c.setFont("Helvetica", 10)
+    lines = [
+        f"Pre-feasibility score: {kpis.get('score','—')}/100 ({kpis.get('recommendation','—')})",
+        f"NPV: {kpis.get('npv','—')}   |   IRR: {kpis.get('irr','—')}   |   Payback: {kpis.get('payback','—')}",
+        f"Initial outlay: {kpis.get('initial_outlay','—')}   |   Build CAPEX: {kpis.get('build_capex','—')}",
+    ]
+    c.setFillColor(colors.HexColor("#111827"))
+    for line in lines:
+        c.drawString(x, y, line)
+        y -= 13
+    return y - 6
+
+def _df_to_rows(df: pd.DataFrame):
+    return [list(df.columns)] + df.astype(str).values.tolist()
+
+def _draw_table_paged(c, x, y, df: pd.DataFrame, col_widths, title=None, page_bottom=55, page_top=None):
+    """
+    Draw a table with automatic pagination.
+    Returns (page_number_increments, final_y_on_last_page)
+    """
+    if title:
+        y = _draw_section_title(c, x, y, title)
+
+    rows = _df_to_rows(df)
+    header = rows[0]
+    body = rows[1:]
+
+    row_h = 14
+    if page_top is None:
+        page_top = y
+
+    def draw_header_row(ypos):
+        c.setFillColor(colors.HexColor("#F1F5F9"))
+        c.rect(x, ypos - row_h + 3, sum(col_widths), row_h, stroke=0, fill=1)
+        c.setFillColor(colors.HexColor("#0F172A"))
+        c.setFont("Helvetica-Bold", 9)
+        xx = x
+        for i, h in enumerate(header):
+            c.drawString(xx + 4, ypos - 10, str(h)[:45])
+            xx += col_widths[i]
+        return ypos - row_h
+
+    def draw_body_row(ypos, row, shaded):
+        if shaded:
+            c.setFillColor(colors.HexColor("#FAFAFB"))
+            c.rect(x, ypos - row_h + 3, sum(col_widths), row_h, stroke=0, fill=1)
+        c.setFillColor(colors.HexColor("#111827"))
+        c.setFont("Helvetica", 9)
+        xx = x
+        for i, cell in enumerate(row):
+            c.drawString(xx + 4, ypos - 10, str(cell)[:60])
+            xx += col_widths[i]
+        return ypos - row_h
+
+    # header
+    ycur = draw_header_row(y)
+
+    shaded = False
+    for row in body:
+        if ycur <= page_bottom:
+            c.showPage()
+            # caller should redraw header externally; but we keep it simple:
+            # (we assume header is drawn by caller after showPage)
+            # so we just start at top-ish:
+            ycur = page_top
+            ycur = draw_header_row(ycur)
+        ycur = draw_body_row(ycur, row, shaded)
+        shaded = not shaded
+
+    # table outline
+    c.setStrokeColor(colors.HexColor("#CBD5E1"))
+    c.rect(x, ycur + 3, sum(col_widths), (y - ycur) + row_h - 3, stroke=1, fill=0)
+
+    return ycur - 8
+
+def build_pdf_report_pro(
+    *,
+    logo_path: str,
+    brand_orange: str,
+    report_title: str,
+    project_type: str,
+    entry_stage: str,
+    kpis: dict,
+    assumptions: dict,
+    feasibility_df: pd.DataFrame,   # formatted (strings)
+    costs_df: pd.DataFrame,         # formatted (strings)
+    pre_tasks_df: pd.DataFrame,     # formatted (strings)
+    lic_tasks_df: pd.DataFrame,     # formatted (strings)
+    df_cf: pd.DataFrame,            # raw numbers
+):
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    width, height = A4
+    x = 40
+    y = height - 40
+
+    # Page 1: Header + Exec summary + feasibility + costs
+    _draw_header(
+        c, width, height, brand_orange, logo_path,
+        title=report_title,
+        subtitle=f"{project_type} • Entry stage: {entry_stage}",
+    )
+    y = height - 90
+    y = _draw_kpi_row(c, x, y, kpis)
+
+    y = _draw_table_paged(
+        c, x, y, feasibility_df,
+        col_widths=[160, 120, 250],
+        title="Pre‑Feasibility Summary (Numbers + Insight)",
+        page_bottom=70,
+        page_top=height-90,
+    )
+
+    y = _draw_table_paged(
+        c, x, y, costs_df,
+        col_widths=[70, 300, 160],
+        title="Costs Summary (DEV + CAPEX)",
+        page_bottom=70,
+        page_top=height-90,
+    )
+
+    # Page 2: Charts
+    c.showPage()
+    _draw_header(
+        c, width, height, brand_orange, logo_path,
+        title=report_title,
+        subtitle="Charts",
+    )
+
+    fig1, fig2 = make_mpl_charts(df_cf, brand_orange)
+    img1 = ImageReader(io.BytesIO(fig_to_png_bytes_matplotlib(fig1)))
+    img2 = ImageReader(io.BytesIO(fig_to_png_bytes_matplotlib(fig2)))
+
+    c.drawImage(img1, x, height - 380, width=520, height=260, preserveAspectRatio=True, mask="auto")
+    c.drawImage(img2, x, height - 680, width=520, height=260, preserveAspectRatio=True, mask="auto")
+
+    # Page 3+: Development tasks
+    c.showPage()
+    _draw_header(
+        c, width, height, brand_orange, logo_path,
+        title=report_title,
+        subtitle="Development Tasks",
+    )
+    y = height - 90
+    y = _draw_table_paged(
+        c, x, y, pre_tasks_df,
+        col_widths=[360, 120],
+        title="Pre‑licensing Tasks (Line Items)",
+        page_bottom=70,
+        page_top=height-90,
+    )
+    y = _draw_table_paged(
+        c, x, y, lic_tasks_df,
+        col_widths=[360, 120],
+        title="Licensing Tasks (Line Items)",
+        page_bottom=70,
+        page_top=height-90,
+    )
+
+    # Cashflows (appendix)
+    c.showPage()
+    _draw_header(
+        c, width, height, brand_orange, logo_path,
+        title=report_title,
+        subtitle="Cashflows & Assumptions (Appendix)",
+    )
+    y = height - 90
+
+    cash = df_cf.copy()
+    cash = cash[["Year", "Total Revenue ($)", "OPEX ($)", "Net Cashflow ($)", "Cumulative ($)"]].copy()
+    for col in ["Total Revenue ($)", "OPEX ($)", "Net Cashflow ($)", "Cumulative ($)"]:
+        cash[col] = cash[col].map(lambda v: f"{float(v):,.0f}")
+
+    y = _draw_table_paged(
+        c, x, y, cash,
+        col_widths=[55, 140, 100, 120, 120],
+        title="Cashflows (All Years)",
+        page_bottom=70,
+        page_top=height-90,
+    )
+
+    # Assumptions table
+    assump_df = pd.DataFrame(
+        [{"Assumption": k, "Value": str(v)} for k, v in assumptions.items()]
+    )
+
+    y = _draw_table_paged(
+        c, x, y, assump_df,
+        col_widths=[260, 260],
+        title="All Inputs / Assumptions (Interactive Data Snapshot)",
+        page_bottom=70,
+        page_top=height-90,
+    )
+
+    c.save()
+    buf.seek(0)
+    return buf.read()
 def build_pdf_report(
     *,
     logo_path: str,
@@ -1074,6 +1311,7 @@ with colB:
         key="create_report_html",
     )
 if create_pdf:
+
     # Example feasibility table (use your existing one)
     feas_table = feasibility_numbers_table()[["Metric","Value","Insight"]].copy()
 
@@ -1100,14 +1338,72 @@ if create_pdf:
         feasibility_table=feas_table,
         df_cf=df_cf,
     )
+    kpis = {
+        "score": scorecard["Score"],
+        "recommendation": scorecard["Recommendation"],
+        "npv": money(npv),
+        "irr": pct(irr),
+        "payback": years(payback),
+        "initial_outlay": money(initial_outlay),
+        "build_capex": money(build_capex),
+    }
 
-    st.download_button(
-        "Download report.pdf",
-        data=pdf_bytes,
-        file_name="investment_memo.pdf",
-        mime="application/pdf",
-        use_container_width=True,
+    assumptions = {
+        "Project Type": project_type,
+        "Entry Stage": entry_stage,
+        "Capacity (MW)": capacity_mw,
+        "Capacity Factor (%)": capacity_factor,
+        "Power Price ($/kWh)": price,
+        "OPEX ($/yr)": opex,
+        "Degradation (%/yr)": degradation,
+        "Lifetime (yrs)": lifetime,
+        "Discount Rate (%)": discount,
+        "Carbon price ($/tCO2)": carbon_price,
+        "Grid intensity (tCO2/MWh)": grid_intensity,
+        "Transmission distance (km)": km,
+        "Transmission cost ($)": transmission_cost,
+        "Equipment cost ($)": equip_cost,
+        "Construction/EPC cost ($)": construction_cost,
+        "Build CAPEX ($)": build_capex,
+        "Pre-licensing total ($)": pre_total,
+        "Licensing total ($)": lic_total,
+        "Dev remaining to RTB ($)": dev_remaining,
+        "Initial outlay from entry ($)": initial_outlay,
+    }
+
+    feasibility_df = feasibility_numbers_table()[["Metric","Value","Insight"]].copy()
+    costs_df = costs_table().copy()
+    costs_df["Cost ($)"] = costs_df["Cost ($)"].map(lambda v: f"{float(v):,.0f}")
+
+    pre_rep = pre_tasks_df.copy()
+    pre_rep["Cost ($)"] = pre_rep["Cost ($)"].map(lambda v: f"{float(v):,.0f}")
+    lic_rep = lic_tasks_df.copy()
+    lic_rep["Cost ($)"] = lic_rep["Cost ($)"].map(lambda v: f"{float(v):,.0f}")
+
+
+    pdf_bytes = build_pdf_report_pro(
+        logo_path=LOGO_PATH,
+        brand_orange=BRAND_ORANGE,
+        report_title="Renewable Investment Memo",
+        project_type=project_type,
+        entry_stage=entry_stage,
+        kpis=kpis,
+        assumptions=assumptions,
+        feasibility_df=feasibility_df,
+        costs_df=costs_df,
+        pre_tasks_df=pre_rep,
+        lic_tasks_df=lic_rep,
+        df_cf=df_cf,
     )
+    st.download_button("Download investment_memo.pdf", pdf_bytes, "investment_memo.pdf", "application/pdf")
+
+    # st.download_button(
+    #     "Download report.pdf",
+    #     data=pdf_bytes,
+    #     file_name="investment_memo.pdf",
+    #     mime="application/pdf",
+    #     use_container_width=True,
+    # )
     
 
 if create_html:
