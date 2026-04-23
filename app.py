@@ -20,7 +20,7 @@ from reportlab.lib.utils import ImageReader
 st.set_page_config(page_title="Renewable Investment Dashboard", page_icon="📊", layout="wide")
 
 BRAND_ORANGE = "#FF6A00"
-LOGO_PATH = "ideal_logo.jpg"
+LOGO_PATH = "ideallogo.png"
 TRANSMISSION_COST_PER_KM = 100_000.0  # $ per km
 
 # ============================================================
@@ -154,7 +154,6 @@ st.markdown(
         <div class="brandsub">Pre‑feasibility scorecard • Stage costs • Transmission km pricing • Carbon income • PDF memo export</div>
       </div>
     </div>
-    <div class="badge">Light Theme • Orange Accent</div>
   </div>
   <div class="accent-line"></div>
 </div>
