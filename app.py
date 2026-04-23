@@ -1022,53 +1022,53 @@ Carbon assumption: ${carbon_price:.2f}/tCO₂ and {grid_intensity:.2f} tCO₂/MW
 """
     return html
 
-    def make_html_report_with_mpl_charts(df_cf, brand_orange, kpis, costs_table, feasibility_table):
-    fig1, fig2 = make_mpl_charts(df_cf, brand_orange)
-    img1_uri = "data:image/png;base64," + base64.b64encode(fig_to_png_bytes_matplotlib(fig1)).decode("utf-8")
-    img2_uri = "data:image/png;base64," + base64.b64encode(fig_to_png_bytes_matplotlib(fig2)).decode("utf-8")
+def make_html_report_with_mpl_charts(df_cf, brand_orange, kpis, costs_table, feasibility_table):
+fig1, fig2 = make_mpl_charts(df_cf, brand_orange)
+img1_uri = "data:image/png;base64," + base64.b64encode(fig_to_png_bytes_matplotlib(fig1)).decode("utf-8")
+img2_uri = "data:image/png;base64," + base64.b64encode(fig_to_png_bytes_matplotlib(fig2)).decode("utf-8")
 
-    ct = costs_table.copy()
-    if "Cost ($)" in ct.columns:
-        ct["Cost ($)"] = ct["Cost ($)"].map(lambda v: f"{float(v):,.0f}" if v == v else "—")
+ct = costs_table.copy()
+if "Cost ($)" in ct.columns:
+    ct["Cost ($)"] = ct["Cost ($)"].map(lambda v: f"{float(v):,.0f}" if v == v else "—")
 
-    html = f"""
-    <html><head><meta charset="utf-8">
-    <style>
-      body {{ font-family: Arial; color:#0F172A; background:#F6F8FC; padding: 22px; }}
-      .card {{ background:#fff; border:1px solid rgba(15,23,42,.12); border-radius:14px; padding:14px; margin-bottom:14px; }}
-      .accent {{ height:4px; background:linear-gradient(90deg,{brand_orange}, rgba(255,106,0,0)); border-radius:999px; }}
-      table {{ width:100%; border-collapse: collapse; font-size: 12px; }}
-      th, td {{ border:1px solid rgba(15,23,42,.12); padding:8px; text-align:left; }}
-      th {{ background:#F1F5F9; }}
-      img {{ max-width:100%; }}
-    </style></head><body>
-      <div class="card">
-        <h2 style="margin:0;">Renewable Investment Memo</h2>
-        <div class="accent"></div>
-        <p><b>Score:</b> {kpis.get("score","—")}/100 ({kpis.get("recommendation","—")})</p>
-        <p><b>NPV:</b> {kpis.get("npv","—")} &nbsp; <b>IRR:</b> {kpis.get("irr","—")} &nbsp; <b>Payback:</b> {kpis.get("payback","—")}</p>
-        <p><b>Initial outlay:</b> {kpis.get("initial_outlay","—")} &nbsp; <b>Build CAPEX:</b> {kpis.get("build_capex","—")}</p>
-      </div>
+html = f"""
+<html><head><meta charset="utf-8">
+<style>
+  body {{ font-family: Arial; color:#0F172A; background:#F6F8FC; padding: 22px; }}
+  .card {{ background:#fff; border:1px solid rgba(15,23,42,.12); border-radius:14px; padding:14px; margin-bottom:14px; }}
+  .accent {{ height:4px; background:linear-gradient(90deg,{brand_orange}, rgba(255,106,0,0)); border-radius:999px; }}
+  table {{ width:100%; border-collapse: collapse; font-size: 12px; }}
+  th, td {{ border:1px solid rgba(15,23,42,.12); padding:8px; text-align:left; }}
+  th {{ background:#F1F5F9; }}
+  img {{ max-width:100%; }}
+</style></head><body>
+  <div class="card">
+    <h2 style="margin:0;">Renewable Investment Memo</h2>
+    <div class="accent"></div>
+    <p><b>Score:</b> {kpis.get("score","—")}/100 ({kpis.get("recommendation","—")})</p>
+    <p><b>NPV:</b> {kpis.get("npv","—")} &nbsp; <b>IRR:</b> {kpis.get("irr","—")} &nbsp; <b>Payback:</b> {kpis.get("payback","—")}</p>
+    <p><b>Initial outlay:</b> {kpis.get("initial_outlay","—")} &nbsp; <b>Build CAPEX:</b> {kpis.get("build_capex","—")}</p>
+  </div>
 
-      <div class="card">
-        <h3>Costs Summary</h3>
-        {ct.to_html(index=False)}
-      </div>
+  <div class="card">
+    <h3>Costs Summary</h3>
+    {ct.to_html(index=False)}
+  </div>
 
-      <div class="card">
-        <h3>Pre-feasibility Highlights</h3>
-        {feasibility_table.to_html(index=False)}
-      </div>
+  <div class="card">
+    <h3>Pre-feasibility Highlights</h3>
+    {feasibility_table.to_html(index=False)}
+  </div>
 
-      <div class="card">
-        <h3>Charts</h3>
-        <img src="{img1_uri}" />
-        <br/><br/>
-        <img src="{img2_uri}" />
-      </div>
-    </body></html>
-    """
-    return html
+  <div class="card">
+    <h3>Charts</h3>
+    <img src="{img1_uri}" />
+    <br/><br/>
+    <img src="{img2_uri}" />
+  </div>
+</body></html>
+"""
+return html
 st.markdown("### Report Export")
 create_pdf = st.button("Create Report (PDF)", type="primary", use_container_width=True)
 
