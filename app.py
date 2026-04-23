@@ -692,7 +692,7 @@ def make_report_html(fig_cum_png_uri: str, fig_rev_png_uri: str) -> str:
     lic_html = lic_rep.to_html(index=False, escape=False)
 
     insight_list = "".join([f"<li>{n}</li>" for n in scorecard["Notes"]])
-    import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
@@ -728,15 +728,50 @@ def make_mpl_charts(df_cf: pd.DataFrame, brand_orange: str):
     fig2.tight_layout()
 
     return fig1, fig2
-def make_html_report_with_mpl_charts(df_cf, brand_orange, kpis, costs_table, feasibility_table):
+def make_html_report_with_mpl_charts():
     fig1, fig2 = make_mpl_charts(df_cf, brand_orange)
     img1_uri = "data:image/png;base64," + base64.b64encode(fig_to_png_bytes_matplotlib(fig1)).decode("utf-8")
     img2_uri = "data:image/png;base64," + base64.b64encode(fig_to_png_bytes_matplotlib(fig2)).decode("utf-8")
+        today = date.today().isoformat()
+
+    # Basic HTML/CSS for PDF print
+    logo_tag = f'<img src="{logo_uri}" style="height:40px; width:auto;" />' if logo_uri else ""
+    rec_class = scorecard["pill_class"]
+
+    # Tables to HTML
+    ct = costs_table().copy()
+    ct["Cost ($)"] = ct["Cost ($)"].map(lambda v: f"{v:,.0f}")
+    ct_html = ct.to_html(index=False, escape=False)
+
+    fn = feasibility_numbers_table().copy()
+    # Format feasibility values for report
+    def report_val(metric, v):
+        if metric == "IRR":
+            return pct(v)
+        if "share" in metric.lower():
+            return f"{v*100:.1f}%"
+        if "Payback" in metric:
+            return years(int(v)) if v == v else "—"
+        if "ROI multiple" in metric:
+            return f"{v:.2f}x"
+        if "($/kW)" in metric or "($/MW)" in metric:
+            return f"${v:,.0f}"
+        if metric in ("NPV", "Initial outlay (from entry)", "Year 1 total revenue", "Year 1 net cashflow"):
+            return money(v)
+        return str(v)
+    fn["Value"] = [report_val(m, v) for m, v in zip(fn["Metric"], fn["Value"])]
+    fn_html = fn.to_html(index=False, escape=False)
     
-    ct = costs_table.copy()
-    if "Cost ($)" in ct.columns:
-        ct["Cost ($)"] = ct["Cost ($)"].map(lambda v: f"{float(v):,.0f}" if v == v else "—")
-    
+    pre_rep = pre_tasks_df.copy()
+    pre_rep["Cost ($)"] = pre_rep["Cost ($)"].map(lambda v: f"{v:,.0f}")
+    lic_rep = lic_tasks_df.copy()
+    lic_rep["Cost ($)"] = lic_rep["Cost ($)"].map(lambda v: f"{v:,.0f}")
+
+    pre_html = pre_rep.to_html(index=False, escape=False)
+    lic_html = lic_rep.to_html(index=False, escape=False)
+
+    insight_list = "".join([f"<li>{n}</li>" for n in scorecard["Notes"]])
+
     html = f"""
     <html><head><meta charset="utf-8">
     <style>
@@ -1088,7 +1123,7 @@ if create_html:
     "initial_outlay": money(initial_outlay),
     "build_capex": money(build_capex),
     }
-    html = make_html_report_with_mpl_charts(df_cf, BRAND_ORANGE, kpis, costs, feas_table)  # <-- replace with your existing HTML generator
+    html = make_html_report_with_mpl_charts()  # <-- replace with your existing HTML generator
     st.download_button(
         "Download investment_memo.html",
         data=html.encode("utf-8"),
