@@ -1680,7 +1680,7 @@ with colB:
         use_container_width=True,
         key="create_report_html",
     )
-if create_pdf:
+if create_pdf or create_html:
 
     # Example feasibility table (use your existing one)
     feas_table = feasibility_numbers_table()[["Metric","Value","Insight"]].copy()
