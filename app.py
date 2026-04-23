@@ -9,12 +9,7 @@ import base64
 from datetime import date
 import io
 
-# PDF (WeasyPrint)
-try:
-    from weasyprint import HTML
-    WEASYPRINT_OK = True
-except Exception:
-    WEASYPRINT_OK = False
+
 
 # ============================================================
 # CONFIG
@@ -650,9 +645,9 @@ with tab3:
 # ============================================================
 # PDF REPORT GENERATION
 # ============================================================
-def plotly_fig_to_png_bytes(fig) -> bytes:
-    # Requires kaleido installed
-    return fig.to_image(format="png", scale=2)
+# def plotly_fig_to_png_bytes(fig) -> bytes:
+#     # Requires kaleido installed
+#     return fig.to_image(format="png", scale=2)
 
 def make_report_html(fig_cum_png_uri: str, fig_rev_png_uri: str) -> str:
     today = date.today().isoformat()
@@ -684,7 +679,7 @@ def make_report_html(fig_cum_png_uri: str, fig_rev_png_uri: str) -> str:
         return str(v)
     fn["Value"] = [report_val(m, v) for m, v in zip(fn["Metric"], fn["Value"])]
     fn_html = fn.to_html(index=False, escape=False)
-
+    
     pre_rep = pre_tasks_df.copy()
     pre_rep["Cost ($)"] = pre_rep["Cost ($)"].map(lambda v: f"{v:,.0f}")
     lic_rep = lic_tasks_df.copy()
@@ -694,7 +689,168 @@ def make_report_html(fig_cum_png_uri: str, fig_rev_png_uri: str) -> str:
     lic_html = lic_rep.to_html(index=False, escape=False)
 
     insight_list = "".join([f"<li>{n}</li>" for n in scorecard["Notes"]])
+    import matplotlib.pyplot as plt
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 
+def fig_to_png_bytes_matplotlib(fig) -> bytes:
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
+
+def make_mpl_charts(df_cf: pd.DataFrame, brand_orange: str):
+    # 1) Cumulative cashflow
+    fig1, ax1 = plt.subplots(figsize=(7.2, 3.6))
+    ax1.plot(df_cf["Year"], df_cf["Cumulative ($)"], linewidth=3, color=brand_orange)
+    ax1.fill_between(df_cf["Year"], df_cf["Cumulative ($)"], alpha=0.15, color=brand_orange)
+    ax1.set_title("Cumulative Cashflow ($)", fontweight="bold")
+    ax1.grid(True, alpha=0.25)
+    ax1.set_xlabel("Year")
+    ax1.set_ylabel("$")
+    fig1.tight_layout()
+
+    # 2) Revenue composition stacked bars (Energy + Carbon)
+    fig2, ax2 = plt.subplots(figsize=(7.2, 3.6))
+    ax2.bar(df_cf["Year"], df_cf["Energy Revenue ($)"], label="Energy", color="#1D4ED8", alpha=0.85)
+    ax2.bar(df_cf["Year"], df_cf["Carbon Revenue ($)"],
+            bottom=df_cf["Energy Revenue ($)"], label="Carbon", color=brand_orange, alpha=0.85)
+    ax2.set_title("Revenue Composition — Energy vs Carbon", fontweight="bold")
+    ax2.grid(True, axis="y", alpha=0.25)
+    ax2.set_xlabel("Year")
+    ax2.set_ylabel("$")
+    ax2.legend(frameon=False)
+    fig2.tight_layout()
+
+    return fig1, fig2
+
+def build_pdf_report(
+    *,
+    logo_path: str,
+    brand_orange: str,
+    project_type: str,
+    entry_stage: str,
+    kpis: dict,
+    costs_table: pd.DataFrame,
+    feasibility_table: pd.DataFrame,
+    df_cf: pd.DataFrame,
+) -> bytes:
+    """
+    Pure-Python PDF report for Streamlit Cloud:
+    - uses Matplotlib for charts
+    - uses ReportLab for PDF layout
+    """
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    width, height = A4
+
+    # Header
+    y = height - 50
+    if Path(logo_path).exists():
+        c.drawImage(logo_path, 40, y - 10, width=90, height=28, mask='auto')
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(140, y, "Renewable Investment Memo")
+    c.setFont("Helvetica", 10)
+    c.setFillColorRGB(0.25, 0.25, 0.25)
+    c.drawString(140, y - 14, f"{project_type} • Entry stage: {entry_stage}")
+    c.setFillColorRGB(0, 0, 0)
+
+    # Accent line
+    r = int(brand_orange[1:3], 16) / 255
+    g = int(brand_orange[3:5], 16) / 255
+    b = int(brand_orange[5:7], 16) / 255
+    c.setStrokeColorRGB(r, g, b)
+    c.setLineWidth(3)
+    c.line(40, y - 26, width - 40, y - 26)
+
+    # KPI block
+    y2 = y - 70
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(40, y2, "Executive KPIs")
+    c.setFont("Helvetica", 10)
+
+    kpi_lines = [
+        f"Pre-feasibility score: {kpis.get('score','—')}/100 ({kpis.get('recommendation','—')})",
+        f"NPV: {kpis.get('npv','—')}   |   IRR: {kpis.get('irr','—')}   |   Payback: {kpis.get('payback','—')}",
+        f"Initial outlay: {kpis.get('initial_outlay','—')}   |   Build CAPEX: {kpis.get('build_capex','—')}",
+    ]
+    yy = y2 - 18
+    for line in kpi_lines:
+        c.drawString(40, yy, line)
+        yy -= 14
+
+    # Helper to draw simple tables
+    def draw_table(title, df: pd.DataFrame, x, y, max_rows=10):
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(x, y, title)
+        y -= 14
+        c.setFont("Helvetica", 8.8)
+
+        # Column headers
+        cols = list(df.columns)
+        col_widths = [140] + [120] * (len(cols) - 1)
+        # header
+        xx = x
+        for i, col in enumerate(cols):
+            c.setFont("Helvetica-Bold", 8.8)
+            c.drawString(xx, y, str(col)[:28])
+            c.setFont("Helvetica", 8.8)
+            xx += col_widths[i] if i < len(col_widths) else 110
+        y -= 10
+
+        # rows
+        for _, row in df.head(max_rows).iterrows():
+            xx = x
+            for i, col in enumerate(cols):
+                val = str(row[col])
+                c.drawString(xx, y, val[:34])
+                xx += col_widths[i] if i < len(col_widths) else 110
+            y -= 10
+
+        return y - 8
+
+    # Prepare tables (format first)
+    costs = costs_table.copy()
+    if "Cost ($)" in costs.columns:
+        costs["Cost ($)"] = costs["Cost ($)"].map(lambda v: f"{float(v):,.0f}" if v == v else "—")
+
+    feas = feasibility_table.copy()
+
+    # Tables on first page
+    y_tables_top = yy - 10
+    y_left_end = draw_table("Costs Summary (Top)", costs[["Bucket","Item","Cost ($)"]], 40, y_tables_top, max_rows=10)
+    y_right_end = draw_table("Pre-feasibility Highlights", feas, 300, y_tables_top, max_rows=10)
+
+    # Charts page
+    c.showPage()
+    fig1, fig2 = make_mpl_charts(df_cf, brand_orange)
+    img1 = ImageReader(io.BytesIO(fig_to_png_bytes_matplotlib(fig1)))
+    img2 = ImageReader(io.BytesIO(fig_to_png_bytes_matplotlib(fig2)))
+
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(40, height - 50, "Charts")
+    c.drawImage(img1, 40, height - 350, width=520, height=260, preserveAspectRatio=True, mask='auto')
+    c.drawImage(img2, 40, height - 650, width=520, height=260, preserveAspectRatio=True, mask='auto')
+
+    c.showPage()
+
+    # Cashflows page (first N rows)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(40, height - 50, "Cashflows (first 15 years)")
+    cash = df_cf.copy()
+    cash_small = cash[["Year","Total Revenue ($)","OPEX ($)","Net Cashflow ($)","Cumulative ($)"]].head(15)
+    for col in cash_small.columns:
+        if col != "Year":
+            cash_small[col] = cash_small[col].map(lambda v: f"{float(v):,.0f}")
+
+    _ = draw_table("Cashflow Table", cash_small, 40, height - 80, max_rows=15)
+
+    c.save()
+    buf.seek(0)
+    return buf.read()
+    
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -816,47 +972,41 @@ Carbon assumption: ${carbon_price:.2f}/tCO₂ and {grid_intensity:.2f} tCO₂/MW
 </html>
 """
     return html
-
 st.markdown("### Report Export")
-report_cols = st.columns([1.0, 1.0, 1.6], gap="medium")
+create_pdf = st.button("Create Report (PDF)", type="primary", use_container_width=True)
 
-with report_cols[0]:
-    create_pdf = st.button("Create Report (PDF)", type="primary", use_container_width=True)
+if create_pdf:
+    # Example feasibility table (use your existing one)
+    feas_table = feasibility_numbers_table()[["Metric","Value","Insight"]].copy()
 
-with report_cols[1]:
-    create_html = st.button("Download Report (HTML)", use_container_width=True)
+    # Example costs table (use your existing one)
+    costs = costs_table().copy()
 
-with report_cols[2]:
-    if not WEASYPRINT_OK:
-        st.warning("PDF engine not available in this environment (WeasyPrint import failed). You can still download HTML. If you tell me your hosting (Streamlit Cloud/Docker/etc.), I’ll provide the exact install steps to enable PDF.")
+    kpis = {
+        "score": scorecard["Score"],
+        "recommendation": scorecard["Recommendation"],
+        "npv": money(npv),
+        "irr": pct(irr),
+        "payback": years(payback),
+        "initial_outlay": money(initial_outlay),
+        "build_capex": money(build_capex),
+    }
 
-if create_pdf or create_html:
-    # Convert charts to PNG data URIs
-    cum_png = plotly_fig_to_png_bytes(fig_cum)
-    rev_png = plotly_fig_to_png_bytes(fig_rev)
-    cum_uri = bytes_to_data_uri_png(cum_png)
-    rev_uri = bytes_to_data_uri_png(rev_png)
+    pdf_bytes = build_pdf_report(
+        logo_path=LOGO_PATH,
+        brand_orange=BRAND_ORANGE,
+        project_type=project_type,
+        entry_stage=entry_stage,
+        kpis=kpis,
+        costs_table=costs,
+        feasibility_table=feas_table,
+        df_cf=df_cf,
+    )
 
-    html = make_report_html(cum_uri, rev_uri)
-
-    if create_html:
-        st.download_button(
-            "Download report.html",
-            data=html.encode("utf-8"),
-            file_name="investment_memo.html",
-            mime="text/html",
-            use_container_width=True,
-        )
-
-    if create_pdf:
-        if WEASYPRINT_OK:
-            pdf_bytes = HTML(string=html).write_pdf()
-            st.download_button(
-                "Download report.pdf",
-                data=pdf_bytes,
-                file_name="investment_memo.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )
-        else:
-            st.error("Cannot create PDF here because WeasyPrint is unavailable. Use HTML download, or tell me your deployment target so I can enable PDF properly.")
+    st.download_button(
+        "Download report.pdf",
+        data=pdf_bytes,
+        file_name="investment_memo.pdf",
+        mime="application/pdf",
+        use_container_width=True,
+    )
