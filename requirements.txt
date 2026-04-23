@@ -1,8 +1,7 @@
 streamlit
 numpy
-pandas
 numpy-financial
+pandas
 plotly
-kaleido
-weasyprint
-npm
+matplotlib
+reportlab
