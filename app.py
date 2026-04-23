@@ -1111,11 +1111,18 @@ st.markdown("### Report Export")
 colA, colB = st.columns([1, 1], gap="medium")
 
 with colA:
-    create_pdf = st.button("Create Report (PDF)", type="primary", use_container_width=True)
-
+    create_pdf = st.button(
+        "Create Report (PDF)",
+        type="primary",
+        use_container_width=True,
+        key="create_report_pdf",
+    )
 with colB:
-    create_html = st.button("Download Report (HTML)", use_container_width=True)
-
+    create_html = st.button(
+        "Download Report (HTML)",
+        use_container_width=True,
+        key="create_report_html",
+    )
 if create_html:
     # Reuse your existing HTML report builder if you have it.
     # If your old one depends on plotly->png exports, keep it HTML-only.
