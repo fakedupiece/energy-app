@@ -732,7 +732,7 @@ def make_html_report_with_mpl_charts():
     fig1, fig2 = make_mpl_charts(df_cf, brand_orange)
     img1_uri = "data:image/png;base64," + base64.b64encode(fig_to_png_bytes_matplotlib(fig1)).decode("utf-8")
     img2_uri = "data:image/png;base64," + base64.b64encode(fig_to_png_bytes_matplotlib(fig2)).decode("utf-8")
-        today = date.today().isoformat()
+    today = date.today().isoformat()
 
     # Basic HTML/CSS for PDF print
     logo_tag = f'<img src="{logo_uri}" style="height:40px; width:auto;" />' if logo_uri else ""
